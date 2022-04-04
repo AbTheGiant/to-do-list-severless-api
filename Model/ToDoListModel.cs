@@ -13,11 +13,26 @@
 // limitations under the License.
 // modeel for to do list
 
+using System;
+namespace SeverlessApi{
+    public class ToDoItem{
 
-public class ToDoList{
+        public string Id {get;set;} = Guid.NewGuid().ToString("n");
+        public string Name{get; set;}
+        public DateTime createdTime {get;set;}= DateTime.UtcNow;
+        public bool isCompleted {get;set;}
+        public string TaskDescription{get;set;}
+        
+        }
 
-    public int Id {get;set;}
-    public string Name{get; set;}
-    public bool isComplete {get;set;}
-    public string Description {get;set;}
+    public class TodoCreateModel{
+        public string TaskDescription {get;set;}
+    }
+
+    public class TodoUpdateModel{
+        public bool isCompleted {get;set;}
+        public string TaskDescription {get;set;}
+
+    }
+        
 }
