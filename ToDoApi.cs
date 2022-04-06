@@ -1,7 +1,6 @@
+
 using System;
-using System.Linq;
 using System.IO;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
@@ -9,6 +8,9 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Microsoft.Azure.Documents.Client;
+using System.Collections.Generic;
+using System.Linq;
 
 
 namespace SeverlessApi
@@ -18,86 +20,146 @@ namespace SeverlessApi
     {
         static List<ToDoItem> items = new List<ToDoItem>();
         [FunctionName("CreateToDoItem")]
-        public static async Task<IActionResult> CreateTodoItems(
+        public static async Task<IActionResult> CreateToDoItem(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "todo")] HttpRequest req,
-            [CosmosDB(databaseName:"todolistapi", collectionName: "todolistcontainer", ConnectionStringSetting = "CosmosDBConnectionString")] ToDoItem todo,
+            [CosmosDB(databaseName:"testtodo", collectionName: "abiolatest", ConnectionStringSetting = "CosmosDBConnectionString" )] IAsyncCollector<object> todoitems,
             ILogger log)
         {
-            log.LogInformation("Creating ToDo Items");
 
-          
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var input = JsonConvert.DeserializeObject<TodoCreateModel>(requestBody);
-            
-
-            var todo = new ToDoItem(){TaskDescription = input.TaskDescription};
-            items.Add(todo);
-            return new OkObjectResult(todo);
-        }
-
-         [FunctionName("GetToDoItem")]
-        public static  IActionResult GetTodoItems(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "todo")] HttpRequest req,
-            ILogger log)
-        {
-            log.LogInformation("Getting ToDo Items");
-            return new OkObjectResult(items);
-        }
-
-         [FunctionName("GetToDoItemById")]
-            public static async Task<IActionResult> GetTodoItemById(
-                [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "todo{id}")] HttpRequest req,
-                ILogger log, string id)
-            {
-                log.LogInformation("Getting ToDo Item ");
-
-                var todo = items.FirstOrDefault(t => t.Id == id);
-                if (todo == null){
-                    return new NotFoundResult();
-                }
-                return new OkObjectResult(todo);
-            }
-
-        
-         [FunctionName("UdpateToDoitem")]
-            public static async Task<IActionResult> UpdateToDo(
-                [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "todo{id}")] HttpRequest req,
-                ILogger log, string id)
-            {
-                log.LogInformation("updating ToDo Item ");
-
-                var todo = items.FirstOrDefault(t => t.Id == id);
-                if (todo == null){
-                    return new NotFoundResult();
-                }
-
+            try{
 
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-                var updated = JsonConvert.DeserializeObject<TodoUpdateModel>(requestBody);
+                var input = JsonConvert.DeserializeObject<ToDoItem>(requestBody);
+                var todoitem = new ToDoItem
+                {
+                    Name = input.Name,
+                    TaskDescription = input.TaskDescription,
+                    Category = input.Category
+                    
+                };
+                await todoitems.AddAsync(todoitem);
 
-                todo.isCompleted= updated.isCompleted;
-                if(!string.IsNullOrEmpty(updated.TaskDescription)){
-                    todo.TaskDescription=updated.TaskDescription;
-                }
-                return new OkObjectResult(todo);
+                return new OkObjectResult(todoitem);
+                
             }
-
-
-
-          [FunctionName("DeleteToDoItem")]
-            public static async Task<IActionResult> DeleteTodoItem(
-                [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "todo{id}")] HttpRequest req,
-                ILogger log, string id)
-            {
-                log.LogInformation("Deleting ToDo Item ");
-
-                var todo = items.FirstOrDefault(t => t.Id == id);
-
-                if (todo == null){
-                    return new NotFoundResult();
-                }
-                items.Remove(todo);
-                return new OkResult();
-            }
+            catch (Exception ex)
+                {
+                log.LogError($"Couldn't insert item. Exception thrown: {ex.Message}");
+                return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+                 }
         }
-}
+
+    
+        [FunctionName("GetToDoItems")]
+        public static  async Task<IActionResult> GetToDoItems(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "todo")] HttpRequest req,
+            [CosmosDB(
+                databaseName: "testtodo",
+                collectionName: "abiolatest",
+                ConnectionStringSetting = "CosmosDBConnectionString",
+                SqlQuery ="SELECT * FROM c ")] IEnumerable<ToDoItem> toDoItem,
+            ILogger log)
+        {
+            if (toDoItem == null)
+            {
+                return null;
+            }
+            
+
+            return new OkObjectResult(toDoItem);
+        }
+
+
+        [FunctionName("GetToDoItemsById")]
+        public static  async Task<IActionResult> GetToDoItemsById(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "todo/{id}")] HttpRequest req,
+            [CosmosDB(
+                databaseName: "testtodod",
+                collectionName: "abiolatest",
+                ConnectionStringSetting = "CosmosDBConnectionString",
+                SqlQuery ="SELECT * FROM c WHERE c.id={id} ORDER BY c._ts DESC")] IEnumerable<ToDoItem> toDoItem,
+            ILogger log,
+            string id)
+        {
+            if (toDoItem == null)
+            {
+                return null;
+            }
+
+            return new OkObjectResult(toDoItem);
+        }
+
+        [FunctionName("UpdateToDoItesm")]
+        public static  async Task<IActionResult> UpdateToDoItem(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "todo/{id}")] HttpRequest req,
+                [CosmosDB(ConnectionStringSetting = "CosmosDBConnectionString")] DocumentClient client,
+                ILogger log,
+                string id)
+        {
+
+
+            
+            
+                string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+                    var updated = JsonConvert.DeserializeObject<TodoUpdateModel>(requestBody);
+                    Uri collectionUri = UriFactory.CreateDocumentCollectionUri("testtodo", "abiolatest");
+                    var document = client.CreateDocumentQuery(collectionUri).Where(c => c.Id == id)
+                                    .AsEnumerable().FirstOrDefault();
+                    if (document == null)
+                    {
+                        return new NotFoundResult();
+                    }
+                    
+
+                    document.SetPropertyValue("isCompleted", updated.isCompleted);
+                    if (!string.IsNullOrEmpty(updated.TaskDescription))
+                    {
+                        document.SetPropertyValue("TaskDescription", updated.TaskDescription);
+                    }
+
+                    await client.ReplaceDocumentAsync(document);
+
+                    /* var todo = new Todo()
+                    {
+                        Id = document.GetPropertyValue<string>("id"),
+                        CreatedTime = document.GetPropertyValue<DateTime>("CreatedTime"),
+                        TaskDescription = document.GetPropertyValue<string>("TaskDescription"),
+                        IsCompleted = document.GetPropertyValue<bool>("IsCompleted")
+                    };*/
+
+                    // an easier way to deserialize a Document
+                    ToDoItem todo2 = (dynamic)document;
+
+                    return new OkObjectResult(todo2);
+
+        }    
+
+        [FunctionName("DeleteTodoItem")]
+        public static async Task<IActionResult> DeleteTodo(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "todo4/{id}")]HttpRequest req,
+            [CosmosDB(ConnectionStringSetting = "CosmosDBConnectionString")] DocumentClient client,
+            ILogger log, string id)
+        {
+            Uri collectionUri = UriFactory.CreateDocumentCollectionUri("testtodo", "abiolatest");
+            var document = client.CreateDocumentQuery(collectionUri).Where(t => t.Id == id)
+                    .AsEnumerable().FirstOrDefault();
+            if (document == null)
+            {
+                return new NotFoundResult();
+            }
+            await client.DeleteDocumentAsync(document.SelfLink);
+            return new OkResult();
+        }       
+
+
+         public class ToDoItem{
+
+        public string Id {get;set;} = Guid.NewGuid().ToString("n");
+        public string Name{get; set;}
+        public DateTime createdTime {get;set;}= DateTime.UtcNow;
+        public bool isCompleted {get;set;}
+        public string TaskDescription{get;set;}
+        public string Category{get;set;}
+        }
+
+}}
