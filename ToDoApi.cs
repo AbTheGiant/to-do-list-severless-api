@@ -19,7 +19,7 @@ namespace SeverlessApi
 
     {
         static List<ToDoItem> items = new List<ToDoItem>();
-        [FunctionName("CreateToDoItem")]
+        [FunctionName("CreateToDoItemAbiola")]
         public static async Task<IActionResult> CreateToDoItem(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "todo")] HttpRequest req,
             [CosmosDB(databaseName:"testtodo", collectionName: "abiolatest", ConnectionStringSetting = "CosmosDBConnectionString" )] IAsyncCollector<object> todoitems,
@@ -74,10 +74,10 @@ namespace SeverlessApi
         public static  async Task<IActionResult> GetToDoItemsById(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "todo/{id}")] HttpRequest req,
             [CosmosDB(
-                databaseName: "testtodod",
+                databaseName: "testtodo",
                 collectionName: "abiolatest",
                 ConnectionStringSetting = "CosmosDBConnectionString",
-                SqlQuery ="SELECT * FROM c WHERE c.id={id} ORDER BY c._ts DESC")] IEnumerable<ToDoItem> toDoItem,
+                SqlQuery ="SELECT * FROM c WHERE c.id={id} ")] IEnumerable<ToDoItem> toDoItem,
             ILogger log,
             string id)
         {
@@ -135,7 +135,7 @@ namespace SeverlessApi
         }    
 
         [FunctionName("DeleteTodoItem")]
-        public static async Task<IActionResult> DeleteTodo(
+       /*  public static async Task<IActionResult> DeleteTodo(
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "todo4/{id}")]HttpRequest req,
             [CosmosDB(ConnectionStringSetting = "CosmosDBConnectionString")] DocumentClient client,
             ILogger log, string id)
@@ -147,11 +147,34 @@ namespace SeverlessApi
             {
                 return new NotFoundResult();
             }
-            await client.DeleteDocumentAsync(document.SelfLink);
+           // await client.DeleteDocumentAsync(document.SelfLink);
+
+            await client.DeleteDocumentAsync(document, new RequestOptions { PartitionKey = new Microsoft.Azure.Documents.PartitionKey("Id") });
             return new OkResult();
-        }       
+        }      */  
 
-
+        public static async Task<IActionResult> DeleteTodo(
+        HttpRequest req, 
+        [CosmosDB(ConnectionStringSetting = "CosmosDBConnectionString")] DocumentClient client, 
+        ILogger log, string Id)
+        {
+        var option = new FeedOptions { EnableCrossPartitionQuery = true };
+        var collectionUri = UriFactory.CreateDocumentCollectionUri("testtodo", "abiolatest");
+        
+        var document = client.CreateDocumentQuery(collectionUri, option).Where(t => t.Id == Id)
+                .AsEnumerable().FirstOrDefault();
+        
+        if (document == null)
+        {
+            return new NotFoundResult();
+        }
+        await client.DeleteDocumentAsync(document.SelfLink, new RequestOptions
+        {
+            PartitionKey = new Microsoft.Azure.Documents.PartitionKey("id")
+        });
+        
+        return new OkResult();
+        }
          public class ToDoItem{
 
         public string Id {get;set;} = Guid.NewGuid().ToString("n");
