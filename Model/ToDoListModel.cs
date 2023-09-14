@@ -17,7 +17,7 @@ using System;
 namespace SeverlessApi{
     public class ToDoItem{
 
-        public string Id {get;set;} = Guid.NewGuid().ToString("n");
+        public string Id {get;set;} = Guid.NewGuid().ToString("nn");
         public string Name{get; set;}
         public DateTime createdTime {get;set;}= DateTime.UtcNow;
         public bool isCompleted {get;set;}
